@@ -2,87 +2,65 @@ import socket
 from threading import Thread
 
 
-# AF address family: ipv4, ipv6, unix bluetooth,
-# 32 bit
-# 255.255.255.255
-# 8 8 8 8
-# 256 [0, 255]
-
-
 class Server(Thread):
-	EOF = b'///'
-	BUFFER_SIZE = 10
+    BUFFER_SIZE = 1024
 
-	def __init__(self, address):
-		super().__init__()
-		self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  # STREAM TCP/ DGRAM UDP
-		self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-		print('Socket created')
-		self.sock.bind(address)
-		print('Socket binded')
-		self.sock.listen(1)
-		print('Socket now listening')
-		self.clients = set()
+    def __init__(self, address):
+        super().__init__()
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        print('socket created')
 
-		# queue
+        self.sock.bind(address)
+        print('socket bound')
 
-	def __del__(self):
-		self.sock.close()
-	
-	# worker queue
-	# while True
-	# queue get
-	# data -> to all
+        self.sock.listen(2)
+        print('socket is listening now')
 
-	def run(self):
-		while True:
-			client_sock, client_address = self.sock.accept()
-			print(client_sock, client_address)
-			self.clients.add(client_sock)
-			Thread(target=self.chatting, args=(client_sock,), daemon=True).start()
+        self.first_player = None
+        self.second_player = None
+        self.clients = []
 
-	def chatting(self, conn):
-		while True:
-			# get
-			print('receiving')
-			data: bytes = self.recv(conn)
-			# queue put data
-			print('received')
-			# processing
-			print('processing')
-			text: str = data.decode('utf-8').upper()
-			if text == 'EXIT':
-				print('exit...')
-				break
-			print(text)
-			data: bytes = text.encode('utf-8')
-			print('sending')
-			# send
-			self.send(conn, data)
-			print('sent')
+    def __del__(self):
+        self.sock.close()
 
-	@staticmethod
-	def send(conn: socket.socket, data: bytes):
-		conn.send(data)
-		conn.send(Server.EOF)
+    def run(self):
+        while True:
+            while len(self.clients) < 2:
+                client_sock, client_address = self.sock.accept()
+                print(client_sock, client_address)
+                self.clients.append(client_sock)
 
-	@staticmethod
-	def recv(conn: socket.socket) -> bytearray:
-		result = bytearray()
-		while True:
-			data: bytes = conn.recv(Server.BUFFER_SIZE)
-			result.extend(data)
-			if not data:
-				break
-			if result[-3:] == Server.EOF:
-				break
-		return result[:-3]
+                # if len(self.clients) == 2:
+                #     self.first_player = self.clients[0]
+                #     self.second_player = self.clients[1]
+                #     Thread(target=self.game).start()
 
+            self.first_player = self.clients[0]
+            self.second_player = self.clients[1]
+            self.game()
 
-# with open('filedfgd', 'wb') as file:
-# 	file.write(result)
+    def game(self):
+        self.first_player.send("Game is starting!".encode())
+        self.first_player.send("Your turn! Enter your city: ".encode())
+        self.second_player.send("Game is starting!\nWait for your turn!".encode())
 
-address = ('localhost', 9000)
+        while True:
+            self.circle(self.first_player, self.second_player)
+            self.circle(self.second_player, self.first_player)
+
+    @staticmethod
+    def circle(player_1, player_2):
+        print('receiving')
+        city: bytes = player_1.recv(Server.BUFFER_SIZE)
+        print('received')
+        print(city, player_1)
+
+        print("sending")
+        player_2.send(f"Your turn! City:\n{city.decode()}\nEnter your city:  ".encode())
+        print("sent")
+
+address = ('localhost', 54678)
 server = Server(address)
 server.start()
 server.join()
